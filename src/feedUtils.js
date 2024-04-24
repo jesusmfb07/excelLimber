@@ -1,22 +1,32 @@
-// feedUtils.js
-export { filterFeedData, processData, isFeedWorking, checkFeedCompleteness };
+export { processData, isFeedWorking,checkFeedCompleteness };
+import { LIMIT_CONSTANT, DATA_FILE, ERROR_FEEDS_FILE, RUNNING_FEEDS_FILE } from './constants.js';
+import { writeResultsToFile, writeFileData } from './fileUtils.js';
+import xml2js from 'xml2js';
 import fetch from "node-fetch";
 import pLimit from "p-limit";
 import fs from "fs";
 import JSONStream from "JSONStream";
 import { Transform } from 'stream';
 
-const limit = pLimit(10);
+const limit = pLimit(LIMIT_CONSTANT);
+let flowNumber = 0;
+
+async function validate(data){
+  return /^<\?xml/i.test(data)
+}
 
 async function isFeedWorking(feedUrl) {
   try {
     const startTime = Date.now();
+    // Waiting the url response
     const response = await fetch(feedUrl, { agent: null });
-    const endTime = Date.now();
-    const durationInfoInMilliseconds = endTime - startTime;
-    const pageSizeInBytes =
-      parseInt(response.headers.get("content-length"), 10) || 0;
+    // Capturing the end time: optional
+    const durationInfoInMilliseconds = Date.now() - startTime;
+    // Capturing content size: optional
+    const contentLengthHeader = response.headers.get("content-length");
+    const pageSizeInBytes = contentLengthHeader != null ? parseInt(contentLengthHeader) : 0;
 
+    // Case response has no content or response 404
     if (!response.ok) {
       if (response.status === 404) {
         return {
@@ -24,6 +34,7 @@ async function isFeedWorking(feedUrl) {
           errorMessage: "Error 404: Not Found",
           pageSizeInBytes,
           durationInfoInMilliseconds,
+          accessRestricted: false,
         };
       } else {
         return {
@@ -40,16 +51,20 @@ async function isFeedWorking(feedUrl) {
     const isContentXML = validate(data);
     const isContentHTML = /<html.*>/i.test(data);
 
+    // Case response has no XML content
     if (isContentHTML || !isContentXML) {
       return {
         isWorking: false,
-        errorMessage: "The file is not XML",
+        errorMessage: "Is not XML file",
         pageSizeInBytes,
         durationInfoInMilliseconds,
+        accessRestricted: false,
       };
     }
 
+    // XML to Json converter
     const parser = new xml2js.Parser();
+
     const parsedData = await parser.parseStringPromise(data);
     const xmlData = parsedData.rss;
 
@@ -59,48 +74,35 @@ async function isFeedWorking(feedUrl) {
         errorMessage: "No RSS data found",
         pageSizeInBytes,
         durationInfoInMilliseconds,
+        accessRestricted: false,
       };
     }
 
-    if (!xmlData["@"] || xmlData["@"].version !== "2.0") {
+    if (xmlData.$.version != "2.0") {
       return {
         isWorking: false,
         errorMessage: "Invalid feed version",
         pageSizeInBytes,
         durationInfoInMilliseconds,
-      };
-    }
-
-    if (!xmlData.channel[0].image || xmlData.channel[0].image.length < 2) {
-      return {
-        isWorking: false,
-        errorMessage: "Feed does not have enough images",
-        pageSizeInBytes,
-        durationInfoInMilliseconds,
-      };
-    }
-
-    if (!xmlData.channel[0].title || xmlData.channel[0].title[0].length < 3) {
-      return {
-        isWorking: false,
-        errorMessage: "Feed title is too short",
-        pageSizeInBytes,
-        durationInfoInMilliseconds,
+        accessRestricted: false,
       };
     }
 
     return {
       isWorking: true,
+      errorMessage: "No Error",
       pageSizeInBytes,
       durationInfoInMilliseconds,
+      accessRestricted: false,
     };
   } catch (error) {
     console.error("ENOTFOUND:", error.message);
     return {
       isWorking: false,
-      errorMessage: "ENOTFOUND",
+      errorMessage: error.message,
       pageSizeInBytes: 0,
       durationInfoInMilliseconds: 0,
+      accessRestricted: false,
     };
   }
 }
@@ -111,7 +113,7 @@ async function checkFeedCompleteness(feedUrl) {
     const data = await response.text();
 
     if (!response.ok || !validate(data)) {
-      return true; // El feed no es XML válido, por lo que se considera incorrecto
+      return false; // El feed no es XML válido, por lo que se considera incorrecto
     }
 
     const parser = new xml2js.Parser();
@@ -119,13 +121,13 @@ async function checkFeedCompleteness(feedUrl) {
     const rss = parsedData.rss;
 
     if (!rss) {
-      return true; // El archivo no contiene datos RSS válidos, por lo que se considera incorrecto
+      return false; // El archivo no contiene datos RSS válidos, por lo que se considera incorrecto
     }
 
     const channel = rss.channel && rss.channel[0];
 
     if (!channel) {
-      return true; // No hay un canal RSS válido, por lo que se considera incorrecto
+      return false; // No hay un canal RSS válido, por lo que se considera incorrecto
     }
 
     const title = channel.title && channel.title[0];
@@ -135,7 +137,7 @@ async function checkFeedCompleteness(feedUrl) {
 
     // Verifica si el canal tiene un título, una descripción, un enlace y al menos un elemento de artículo
     if (!title || !description || !link || !items || items.length === 0) {
-      return true; // El canal RSS no contiene los elementos mínimos necesarios, por lo que se considera incorrecto
+      return false; // El canal RSS no contiene los elementos mínimos necesarios, por lo que se considera incorrecto
     }
 
     // Verifica si cada elemento de artículo tiene un título y una descripción
@@ -144,20 +146,20 @@ async function checkFeedCompleteness(feedUrl) {
     );
 
     if (incompleteItems) {
-      return true; // Hay al menos un artículo incompleto, por lo que se considera incorrecto
+      return false; // Hay al menos un artículo incompleto, por lo que se considera incorrecto
     }
 
-    return false; // El feed XML es completo y funcional, por lo que se considera correcto
+    return true; // El feed XML es completo y funcional, por lo que se considera correcto
   } catch (error) {
     console.error("Error checking feed completeness:", error);
-    return true; // En caso de error, se considera incorrecto
+    return false; // En caso de error, se considera incorrecto
   }
 }
 
-async function filterFeedData(filename) {
+async function processData(filename) {
   console.log(`Starting processing of ${filename}...`);
-  const limit = pLimit(20);
-
+  const errorFeeds = [];
+  const runningFeeds = [];
   const feedDataStream = fs
     .createReadStream(filename)
     .pipe(JSONStream.parse("*"))
@@ -171,15 +173,17 @@ async function filterFeedData(filename) {
             return;
           }
 
+          console.log(`this is ${chunk.feedUrl}...`);
           flowNumber++;
+          console.log(`this is flow number ${flowNumber}...`);
           chunk.flowNumber = flowNumber;
+          console.log(`flowNumber ${chunk.flowNumber}...`);
+          console.log(`chunk ID ${chunk._id}...`);
 
           if (chunk.ID) {
             console.log(`Flow number: ${chunk.ID}`);
             totalProcessedFlows++;
-            console.log(
-              `${totalProcessedFlows} flows have been processed so far.`
-            );
+            console.log(`${totalProcessedFlows} flows have been processed so far.`);
           }
 
           const {
@@ -188,15 +192,21 @@ async function filterFeedData(filename) {
             pageSizeInBytes,
             durationInfoInMilliseconds,
             accessRestricted,
-          } = await limit(() => isFeedWorking(chunk.feedUrl));
-          const isRunningState = ["TO_READ", "IDLE", "READING"].includes(
-            chunk.createdOn
-          );
+          } = await isFeedWorking(chunk.feedUrl);
+          const isRunningState = ["TO_READ", "IDLE", "READING"].includes(chunk.status);
+
+          console.log(`const: ${
+            isWorking} 
+            ${errorMessage}
+            ${pageSizeInBytes}
+            ${durationInfoInMilliseconds}
+            ${accessRestricted}...`);
 
           // 2. Filtrar archivos XML que no tengan una descripción o estén vacíos
-          const isIncorrecto = await checkFeedCompleteness(chunk.feedUrl);
+          const isIncorrecto = !(await checkFeedCompleteness(chunk.feedUrl)); //await checkFeedCompleteness(chunk.feedUrl);
 
-          if (chunk.createdOn === "TO_BE_READ_BY_LIMBER_CRAWLER") {
+
+          if (chunk.status === "TO_BE_READ_BY_LIMBER_CRAWLER") {
             chunk.pageSizeInBytes = "N.A";
             chunk.durationInfoInMilliseconds = "N.A";
             chunk.accesoRestringido = "NO";
@@ -212,8 +222,8 @@ async function filterFeedData(filename) {
 
               // 3. Verificar archivos NOT_AVAILABLE o READING_ERROR que puedan tener un XML funcional
               if (
-                chunk.createdOn === "NOT_AVAILABLE" ||
-                chunk.createdOn === "READING_ERROR"
+                chunk.status === "NOT_AVAILABLE" ||
+                chunk.status === "READING_ERROR"
               ) {
                 if (!isIncorrecto) {
                   chunk.isCorrecto = true;
@@ -230,8 +240,8 @@ async function filterFeedData(filename) {
             // 4. Eliminar el mensaje de error 'invalid feed version' en errorFeeds.json
             if (
               errorMessage === "Invalid feed version" &&
-              (chunk.createdOn === "NOT_AVAILABLE" ||
-                chunk.createdOn === "READING_ERROR")
+              (chunk.status === "NOT_AVAILABLE" ||
+                chunk.status === "READING_ERROR")
             ) {
               if (!isIncorrecto) {
                 chunk.isCorrecto = true;
@@ -272,43 +282,21 @@ async function filterFeedData(filename) {
       })
     );
 
-  feedDataStream.on("finish", () => {
-    console.log(`Processing of ${filename} finished.`);
-    writeResultsToFile(); // Se llama a writeResultsToFile después de que se procesen todos los flujos de datos
-  });
-
-  feedDataStream.on("error", (error) => {
-    console.error(`Error in data stream of ${filename}:`, error);
+  await new Promise((resolve) => {
+    feedDataStream.on("finish", async () => {
+      console.log(`--------------errorFeeds: ${errorFeeds.length}:`);
+      console.log(`--------------runningFeeds: ${runningFeeds.length}:`);
+      console.log(`Processing of ${filename} finished.`);
+      console.log("Writing data");
+      await writeResultsToFile(ERROR_FEEDS_FILE, errorFeeds);
+      await writeResultsToFile(RUNNING_FEEDS_FILE, runningFeeds);
+      console.log("Finished writing data");
+      feedDataStream.on("error", (error) => {
+        console.error(`Error in data stream of ${filename}:`, error);
+      });
+      resolve();
+    });
   });
 }
 
-async function processData() {
-  const runningFlows = [];
-  const errorFeeds = [];
-
-  await filterFeedData(async (chunk) => {
-    const {
-      isWorking,
-      errorMessage,
-      pageSizeInBytes,
-      durationInfoInMilliseconds,
-      accessRestricted,
-    } = await limit(() => isFeedWorking(chunk.feedUrl));
-
-    chunk.pageSizeInBytes = pageSizeInBytes;
-    chunk.durationInfoInMilliseconds = durationInfoInMilliseconds;
-    chunk.accessRestricted = accessRestricted || false;
-
-    if (isWorking) {
-      const isIncorrecto = await checkFeedCompleteness(chunk.feedUrl);
-      chunk.isCorrecto = !isIncorrecto;
-      runningFlows.push(chunk);
-    } else {
-      chunk.errorMessage = errorMessage;
-      errorFeeds.push(chunk);
-    }
-  });
-
-  writeFileData("runningFlow.json", runningFlows);
-  writeFileData("errorFeeds.json", errorFeeds);
-}
+  

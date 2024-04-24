@@ -1,1 +1,72 @@
-[]
+[
+  {
+    "_id": "644fbc2cb8bbd6d37881e2c5",
+    "feedUrl": "https://feeds-twitter.limber.io/rss/f8066e4f-037d-40a0-8ef6-390a1653eff4.xml",
+    "status": "READING_ERROR",
+    "accessedAt": "2024-04-17T20:44:15.655Z",
+    "createdOn": "2023-05-01T13:18:36.712Z",
+    "readingErrorCode": "URL-0001",
+    "readingErrorMessage": "exception.app.not.found.url",
+    "nextCrawlAt": "",
+    "flowNumber": 1,
+    "error": "Error 404: Not Found",
+    "pageSizeInBytes": 30,
+    "durationInfoInMilliseconds": 881
+  },
+  {
+    "_id": "59f613d8dd21ad0003f32985",
+    "feedUrl": "https://www.maison.com/rss/architecture-1/",
+    "status": "READING_ERROR",
+    "accessedAt": "2024-04-17T20:44:18.174Z",
+    "createdOn": "2017-10-29T17:46:00.995Z",
+    "readingErrorCode": "FEED-0007",
+    "readingErrorMessage": "exception.feed.reader.url.contains.no.feeds",
+    "nextCrawlAt": "",
+    "flowNumber": 2,
+    "error": "validate is not defined",
+    "pageSizeInBytes": 0,
+    "durationInfoInMilliseconds": 0
+  },
+  {
+    "_id": "60daf3d9506db06e44c997fe",
+    "feedUrl": "https://www.jacheteenespagne.com/blog/espagne-ou-trouver-lacheteur-ideal-pour-votre-bien-immobilier/feed/",
+    "status": "READING_ERROR",
+    "accessedAt": "2024-04-17T20:44:22.602Z",
+    "createdOn": "2021-06-29T10:20:09.594Z",
+    "readingErrorCode": "FEED-0006",
+    "readingErrorMessage": "exception.feed.reader.url.contains.many.feeds",
+    "nextCrawlAt": "",
+    "flowNumber": 3,
+    "error": "validate is not defined",
+    "pageSizeInBytes": 0,
+    "durationInfoInMilliseconds": 0
+  },
+  {
+    "_id": "57bff8dbf66f950003f0d7c2",
+    "feedUrl": "http://www.cnsa.fr//actualites.xml",
+    "status": "READING_ERROR",
+    "accessedAt": "2024-04-17T20:55:11.695Z",
+    "createdOn": "2016-08-26T08:07:55.722Z",
+    "readingErrorCode": "APP-0001",
+    "readingErrorMessage": "exception.app.method.execution.error",
+    "nextCrawlAt": "2024-04-17T18:42:36.496Z",
+    "flowNumber": 4,
+    "error": "validate is not defined",
+    "pageSizeInBytes": 0,
+    "durationInfoInMilliseconds": 0
+  },
+  {
+    "_id": "5672967bed5cfc0003ce3dcf",
+    "feedUrl": "http://www.lequipe.fr/rss/actu_rss_Rugby.xml",
+    "status": "READING_ERROR",
+    "accessedAt": "2024-04-17T20:56:42.092Z",
+    "createdOn": "2016-04-14T11:38:59.880Z",
+    "readingErrorCode": "URL-0001",
+    "readingErrorMessage": "exception.app.not.found.url",
+    "nextCrawlAt": "2024-04-17T17:13:56.574Z",
+    "flowNumber": 5,
+    "error": "Error 404: Not Found",
+    "pageSizeInBytes": 34,
+    "durationInfoInMilliseconds": 750
+  }
+]
