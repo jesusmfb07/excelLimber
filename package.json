@@ -1,0 +1,20 @@
+{
+  "name": "feed-processor",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "fs": "^0.0.1-security",
+    "JSONStream": "^1.3.5",
+    "node-fetch": "^3.3.2",
+    "p-limit": "^5.0.0"
+  }
+}
